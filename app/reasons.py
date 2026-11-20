@@ -30,6 +30,13 @@ REASONS = {
     'MODEL_UNAVAILABLE': '至少一幅图缺少重估模型',
     'GAP_OVER_LIMIT': '地面拼缝偏差超限',
     'NO_EDGE_REGISTERED': '未登记独立拼缝',
+    'EDGE_NOT_MEASURABLE': '拼缝缺模型或次序不合，暂不能会签',
+    'NO_MIXED_EVIDENCE': '拼缝缺少超限与限内两类独立见证，不具备会签条件',
+    'CONCURRENCE_EXISTS': '该批次拼缝已有正式会签，重跑不得新增',
+    'CONCURRENCE_VERSION_CONFLICT': '会签版本已变化，请刷新后重试',
+    'WITHIN_LIMIT': '限内采信见证',
+    'OVER_LIMIT': '超限争议见证，待复核',
+    'JOINT_HOLD': '两幅共同暂扣，争议点复核后再放行',
 }
 
 

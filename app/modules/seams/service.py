@@ -21,6 +21,8 @@ def inspect_edge(edge, rows, quarantined, a, b, models, limit):
     if 'MODEL_UNAVAILABLE' not in reasons and 'EDGE_ORDER' not in reasons:
         left, right = (models[code]['model'] for code in (edge['a'], edge['b']))
         result.update(measure_gap(rows, left, right, endpoints(a, edge['a_side']), endpoints(b, edge['b_side'])))
+        for station in result['stations']:
+            station['verdict'] = 'OVER_LIMIT' if station['gap_m'] > limit + DISTANCE_EPSILON_M else 'WITHIN_LIMIT'
     if result['max_m'] is not None and result['max_m'] > limit + DISTANCE_EPSILON_M:
         result.update(status='FAIL', reason='GAP_OVER_LIMIT', reasons=['GAP_OVER_LIMIT', *reasons])
     elif reasons:

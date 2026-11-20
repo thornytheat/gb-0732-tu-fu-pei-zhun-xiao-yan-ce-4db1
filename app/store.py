@@ -20,6 +20,15 @@ CREATE TABLE IF NOT EXISTS signatures (
     version INTEGER NOT NULL CHECK (version = 1),
     PRIMARY KEY (run_id, sheet)
 );
+CREATE TABLE IF NOT EXISTS concurrences (
+    run_id TEXT NOT NULL REFERENCES runs(run_id),
+    edge TEXT NOT NULL,
+    document TEXT NOT NULL,
+    reviewer TEXT NOT NULL,
+    signed_at TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (version = 1),
+    PRIMARY KEY (run_id, edge)
+);
 '''
 
 
@@ -56,7 +65,19 @@ class Store:
             'SELECT sheet, reviewer, signed_at, version FROM signatures WHERE run_id = ? ORDER BY sheet',
             (run_id,),
         )
-        return {**json.loads(row['snapshot']), 'signatures': [dict(signature) for signature in signatures]}
+        concurrences = connection.execute(
+            'SELECT document FROM concurrences WHERE run_id = ? ORDER BY edge', (run_id,),
+        ).fetchall()
+        documents = [json.loads(item['document']) for item in concurrences]
+        snapshot = {**json.loads(row['snapshot']), 'signatures': [dict(signature) for signature in signatures],
+                    'concurrences': documents}
+        edges_by_sheet = {}
+        for document in documents:
+            for sheet in document['disposition']['sheets']:
+                edges_by_sheet.setdefault(sheet['code'], []).append(document['edge'])
+        for review in snapshot['reviews']:
+            review['concurrence_edges'] = edges_by_sheet.get(review['code'], [])
+        return snapshot
 
     def get(self, run_id, required=True):
         with self.connect() as connection:
@@ -89,3 +110,29 @@ class Store:
             connection.execute('INSERT INTO signatures VALUES (?, ?, ?, ?, 1)',
                                (run_id, sheet, reviewer, signed_at))
             return {'sheet': sheet, 'reviewer': reviewer, 'signed_at': signed_at, 'version': 1}
+
+    def concur(self, run_id, edge, document):
+        # 整笔事务：任一步失败均回滚，旧版会签原样保留
+        with self.connect('IMMEDIATE') as connection:
+            self._read(connection, run_id)
+            row = connection.execute(
+                'SELECT reviewer, signed_at, version FROM concurrences WHERE run_id = ? AND edge = ?',
+                (run_id, edge)).fetchone()
+            reviewer = document['reviewer']
+            if row is not None:
+                if row['reviewer'] == reviewer and document['expected_version'] in (0, row['version']):
+                    return self._read(connection, run_id)['concurrences']
+                if row['reviewer'] != reviewer:
+                    raise RegisterError('CONCURRENCE_EXISTS',
+                                        '同一批次重跑不能新增正式会签；版本冲突请刷新后重试', 409,
+                                        {'edge': edge, 'version': row['version']})
+                raise RegisterError('CONCURRENCE_VERSION_CONFLICT', '会签版本已变化，请刷新后重试', 409,
+                                    row['version'])
+            if document['expected_version'] != 0:
+                raise RegisterError('CONCURRENCE_VERSION_CONFLICT', '会签版本已变化，请刷新后重试', 409, 0)
+            signed_at = datetime.now(timezone.utc).isoformat(timespec='seconds')
+            record = {**{key: value for key, value in document.items() if key != 'expected_version'},
+                      'signed_at': signed_at, 'version': 1}
+            connection.execute('INSERT INTO concurrences VALUES (?, ?, ?, ?, ?, 1)',
+                               (run_id, edge, canonical_json(record), reviewer, signed_at))
+            return self._read(connection, run_id)['concurrences']

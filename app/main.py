@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import RULE_VERSION, STATIC, Settings
 from app.errors import RegisterError
 from app.modules.affine.handler import router as affine
+from app.modules.concurrence.handler import router as concurrence
 from app.modules.coordinates.handler import router as coordinates
 from app.modules.intake.handler import router as intake
 from app.modules.pairing.handler import router as pairing
@@ -28,7 +29,7 @@ def create_app(settings=None):
     app.state.settings = settings or Settings()
     app.state.store = Store(app.state.settings.database)
     app.mount('/static', StaticFiles(directory=STATIC), name='static')
-    for router in (web, intake, coordinates, pairing, affine, refit, seams, review):
+    for router in (web, intake, coordinates, pairing, affine, refit, seams, review, concurrence):
         app.include_router(router)
 
     @app.exception_handler(RegisterError)

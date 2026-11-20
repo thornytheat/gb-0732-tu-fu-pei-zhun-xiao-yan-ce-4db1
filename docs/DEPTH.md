@@ -14,6 +14,7 @@
 | M5 离群重估 | 查看稳健重估后的残差及排除理由 | `GET /api/refit` | `app/modules/refit/consensus.py` `app/modules/refit/service.py` | `tests/test_refit.py` |
 | M6 接缝验核 | 验证相邻边覆盖、次序与偏差 | `GET /api/seams` | `app/modules/seams/witnesses.py` `app/modules/seams/geometry.py` `app/modules/seams/service.py` | `tests/test_seams.py` |
 | M7 图幅签审 | 勾稽三表、签审、留存和导出 | `POST /api/review/runs` | `app/modules/review/decisions.py` `app/modules/review/reconcile.py` `app/modules/review/service.py` | `tests/test_review.py` |
+| M8 接缝会签 | 混合证据分采、两幅共同暂扣、会签版本与回滚 | `POST /api/review/runs/{run_id}/concurrences` | `app/modules/concurrence/service.py` `app/modules/concurrence/handler.py` `app/store.py` | `tests/test_concurrence.py` |
 
 ## 陷阱登记
 
@@ -39,6 +40,9 @@
 | TRAP-28 | `sample_data/field/ground.csv` 的河西 P08 偏离 | 初算剔除误伤多点 | 稳定多数重估恢复良点 | `app/modules/refit/consensus.py` | `tests/test_refit.py::test_refit_recovers_good_points_that_initial_fit_would_drop` |
 | TRAP-29 | `sample_data/field/witness.csv` 的 `HX-QS` | 小训练残差冒充拼缝通过 | 两侧独立投影后取最大平面差 | `app/modules/seams/geometry.py` | `tests/test_seams.py::test_independent_edge_fails_even_when_both_training_residuals_are_small` |
 | TRAP-30 | `sample_data/field/witness.csv` 测试副本用旧控制点名冒充见证 | 重复证据进入独立核验 | 用规范名和像素索引排除 | `app/modules/seams/witnesses.py` | `tests/test_seams.py::test_pseudo_witness_reusing_a_control_alias_is_excluded` |
+| TRAP-31 | 测试副本让 `HX-QS` 出现 1 个超限点与 4 个限内点 | 只看多数点则真实错缝被平均；按最差点又拖停邻幅 | 逐站分采，整边仍判 `FAIL`，会签固定两幅 `JOINT_HOLD` | `app/modules/concurrence/service.py` | `tests/test_concurrence.py::test_concurrence_records_adopted_disputed_and_joint_hold_for_both_folios` |
+| TRAP-32 | 同参数重跑同一批次后再次会签 | 重跑新增第二份正式会签 | 批次键去重＋每边唯一会签，重复请求 409 或幂等 | `app/store.py` | `tests/test_concurrence.py::test_same_batch_rerun_cannot_add_a_second_formal_concurrence` |
+| TRAP-33 | 会签写入中途 SQL 失败 | 半笔会签落库，旧版被覆盖 | 单事务回滚，旧版会签原样可读 | `app/store.py` | `tests/test_concurrence.py::test_failed_save_rolls_back_and_keeps_the_previous_concurrence` |
 
 ## 对账
 

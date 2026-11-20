@@ -37,8 +37,11 @@ Compose 将批次与签审保存到 `register-data` 命名卷。需要空册时�
 | 离群重估 | `GET /api/refit` | 阈值内多数点拟合、稳定复估、保留离群依据 |
 | 接缝验核 | `GET /api/seams` | 复用筛查、证明覆盖与次序、贴边独立测距 |
 | 图幅签审 | `POST /api/review/runs` | 原件勾稽、图边签审判定、批次留存 |
+| 接缝会签 | `POST /api/review/runs/{run_id}/concurrences` | 混合证据分采、两幅共同暂扣、会签版本与回滚 |
 
-预检入口接收 `dataset=field` 或 `dataset=reference`，以及可选的 `control_limit_m`、`seam_limit_m`。运行接口接收同名 JSON 字段。`GET /api/review/runs/{run_id}` 回读，`POST /api/review/runs/{run_id}/signatures` 对可签图幅录名，`GET /api/review/runs/{run_id}/export` 下载一份证据。接口目录在 `/docs`。
+预检入口接收 `dataset=field` 或 `dataset=reference`，以及可选的 `control_limit_m`、`seam_limit_m`。运行接口接收同名 JSON 字段。`GET /api/review/runs/{run_id}` 回读，`POST /api/review/runs/{run_id}/signatures` 对可签图幅录名，`POST /api/review/runs/{run_id}/concurrences` 对同时含限内与超限见证的拼缝登记接缝会签，`GET /api/review/runs/{run_id}/export` 下载一份证据。接口目录在 `/docs`。
+
+接缝会签把限内独立点列为采信见证、超限点列为待复核争议点，并固定两幅图共同暂扣（`JOINT_HOLD`）到争议点复核完成为止；每站保留 `witness.csv` 源行与原值，可从图幅状态的 `concurrence_edges` 回查。同参数重跑复用同一批次，不会新增第二份正式会签，保存失败时旧版会签随事务回滚保留。
 
 默认原件包含一个高影响离群点、冲突重测及一幅共线退化图。河西和青石桥均可拟合，但两图之间的见证偏差超限；柳湾可以签审。校准副本的 48 个控制点采信、三条边通过，四幅均可签。
 

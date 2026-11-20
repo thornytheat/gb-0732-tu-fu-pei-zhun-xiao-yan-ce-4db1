@@ -31,8 +31,9 @@ input[type=number] { font-family: var(--mono); }
 .seam-item > span:last-child { text-align: right; }
 .status { font-size: 11px; font-weight: 600; white-space: nowrap; }
 .status[data-status=PASS], .status[data-status=READY], .status[data-status=SIGNED], .status[data-status=FIT] { color: var(--ok); }
-.status[data-status=RETURN], .status[data-status=FAIL], .status[data-status=OUTLIER] { color: var(--bad); }
-.status[data-status=BLOCKED], .status[data-status=HOLD] { color: var(--warn); }
+.status[data-status=RETURN], .status[data-status=FAIL], .status[data-status=OUTLIER], .status[data-status=OVER_LIMIT] { color: var(--bad); }
+.status[data-status=BLOCKED], .status[data-status=HOLD], .status[data-status=WITHIN_LIMIT] { color: var(--warn); }
+.status[data-status=CONCURRED], .status[data-status=JOINT_HOLD] { color: var(--accent); border: 1px solid var(--accent); padding: 0 5px; }
 .atlas-plate, .edge-plate { position: relative; margin: 12px; padding: 5px; border: 1px solid var(--line-2); }
 .atlas-plate::before, .edge-plate::before { position: absolute; pointer-events: none; content: ''; inset: 3px; border: 1px solid var(--line); }
 canvas { display: block; max-width: 100%; width: 100%; }
@@ -63,4 +64,10 @@ canvas { display: block; max-width: 100%; width: 100%; }
 .signature-form .button { min-height: 31px; }
 .residual-wrap { padding: 6px var(--pad); border-bottom: 1px solid var(--line); }
 .residual-wrap canvas { height: 156px; }
+.concurrence-card { margin: 6px var(--pad) 10px; border: 1px solid var(--line-2); background: var(--panel-2); padding: 10px 0 6px; }
+.concurrence-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 var(--pad) 8px; font-size: 12px; }
+.concurrence-head strong { font: 700 14px/1.2 var(--serif); }
+.concurrence-head .num { color: var(--ink-3); margin-inline-start: auto; }
+.concurrence-line { padding: 0 var(--pad) 8px; font-size: 12px; color: var(--ink-2); }
+.concurrence-form { border-top-color: var(--line-2); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto; animation: none !important; transition: none !important; } }

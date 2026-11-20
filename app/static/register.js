@@ -1,9 +1,9 @@
-import {badge, el, fmt, reason, renderLedger} from './ledgers.js';
-import {drawAtlas, drawEdge} from './plots.js';
+import {badge, el, fmt, reason, renderLedger} from './ledgers.js';import {drawAtlas, drawEdge} from './plots.js';
 
 const byId = id => document.getElementById(id);
 const form = byId('run-form');
 const sign = byId('signature-form');
+const concurrenceForm = byId('concurrence-form');
 const links = [...document.querySelectorAll('[data-section]')];
 const state = {snapshot: null, catalog: null, preview: null, section: null, selected: null, edgeId: null,
   busy: false, signing: false, previewToken: 0, reused: false};
@@ -54,6 +54,7 @@ function plot() {
 function renderSheetIndex() {
   const root = byId('sheet-index');
   const signed = new Set(state.snapshot?.signatures.map(item => item.sheet) || []);
+  const held = new Set((state.snapshot?.concurrences || []).flatMap(item => item.disposition.sheets.map(sheet => sheet.code)));
   root.replaceChildren();
   for (const sheet of state.catalog?.sheets || []) {
     const button = el('button', null, 'sheet-item');
@@ -64,6 +65,7 @@ function renderSheetIndex() {
     button.append(el('span', sheet.code, 'num'), el('span', sheet.title));
     const decision = state.snapshot?.reviews.find(item => item.code === sheet.code);
     if (decision) button.append(badge(signed.has(sheet.code) ? 'SIGNED' : decision.status));
+    if (held.has(sheet.code)) button.append(badge('CONCURRED'));
     root.append(button);
   }
   byId('all-sheets').disabled = !state.selected;
@@ -76,6 +78,7 @@ function renderSeamIndex() {
   const root = byId('seam-index');
   root.replaceChildren();
   const results = state.snapshot?.seams.edges || state.catalog?.edges || [];
+  const concurred = new Set((state.snapshot?.concurrences || []).map(item => item.edge));
   for (const edge of results) {
     const button = el('button', null, 'seam-item');
     button.type = 'button';
@@ -86,11 +89,31 @@ function renderSeamIndex() {
     key.append(el('strong', edge.code, 'num'), el('small', `${edge.a} ${sides[edge.a_side]} · ${edge.b} ${sides[edge.b_side]}`));
     const value = el('span');
     if (edge.status) value.append(badge(edge.status), el('small', edge.max_m == null ? '—' : `${fmt(edge.max_m)} m`, 'num'));
+    if (concurred.has(edge.code)) value.append(badge('CONCURRED'));
     button.append(key, value);
     root.append(button);
   }
   const edge = activeEdge();
   byId('edge-caption').textContent = edge ? (edge.max_m == null ? reason(edge.reason) : `沿甲边位置 % · 法向偏移 m`) : '';
+}
+
+function renderConcur() {
+  const snapshot = state.snapshot;
+  if (state.section !== 'seams' || !snapshot) {
+    concurrenceForm.hidden = true;
+    return;
+  }
+  const existing = new Set(snapshot.concurrences.map(item => item.edge));
+  const eligible = snapshot.seams.edges.filter(edge => edge.status === 'FAIL' && edge.max_m != null &&
+    edge.stations.some(station => station.verdict === 'OVER_LIMIT') &&
+    edge.stations.some(station => station.verdict === 'WITHIN_LIMIT') && !existing.has(edge.code));
+  concurrenceForm.hidden = !eligible.length;
+  const options = byId('concurrence-edge');
+  const selected = options.value;
+  options.replaceChildren(...eligible.map(edge => new Option(
+    `${edge.code}（${edge.a}·${edge.b}）`, edge.code)));
+  if (eligible.some(edge => edge.code === selected)) options.value = selected;
+  else if (eligible.some(edge => edge.code === state.edgeId)) options.value = state.edgeId;
 }
 
 function renderSign() {
@@ -116,6 +139,7 @@ function renderDetail() {
   const limit = state.snapshot?.manifest.parameters.control_limit_m || parameters().control_limit_m;
   renderLedger(byId('detail-content'), state.section, {...state, limit});
   renderSign();
+  renderConcur();
 }
 
 function showSnapshot(snapshot) {
@@ -166,6 +190,7 @@ async function selectSection(section, focus = false) {
   state.preview = null;
   const token = ++state.previewToken;
   feedback('signature-error', null);
+  feedback('concurrence-error', null);
   renderDetail();
   if (focus) byId('detail-title').focus({preventScroll: true});
   if (focus) byId('section-detail').scrollIntoView({block: 'start'});
@@ -220,6 +245,31 @@ sign.addEventListener('submit', async event => {
     byId('run-state').textContent = `${sheet} 已签审入册`;
   } catch (error) {
     feedback('signature-error', error.message);
+  } finally {
+    state.signing = false;
+    button.disabled = false;
+  }
+});
+
+concurrenceForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (state.busy || state.signing) return;
+  state.signing = true;
+  const button = concurrenceForm.querySelector('button');
+  button.disabled = true;
+  const runId = state.snapshot.manifest.run_id;
+  feedback('concurrence-error', null);
+  try {
+    const edge = byId('concurrence-edge').value;
+    const reviewer = byId('concurrence-reviewer').value;
+    await post(`/api/review/runs/${runId}/concurrences`, {edge, reviewer, expected_version: 0});
+    showSnapshot(await request(`/api/review/runs/${runId}`));
+    state.edgeId = edge;
+    renderSeamIndex();
+    renderDetail();
+    byId('run-state').textContent = `${edge} 接缝会签已入册：两幅共同暂扣待复核`;
+  } catch (error) {
+    feedback('concurrence-error', error.message);
   } finally {
     state.signing = false;
     button.disabled = false;

@@ -4,6 +4,7 @@ export const labels = {
   PASS: '通过', FAIL: '超限', BLOCKED: '待核', FIT: '已拟合', READY: '可签', HOLD: '暂缓', RETURN: '退修',
   SIGNED: '已签', OUTLIER: '离群', ACCEPTED: '采信', RECEIVED: '已收',
   EMPTY_FILE: '空档', BLANK_FILE: '空行档', HEADER_ONLY: '仅表头',
+  WITHIN_LIMIT: '限内采信', OVER_LIMIT: '超限待核', CONCURRED: '已会签',
 };
 const reasons = JSON.parse(document.getElementById('reason-dictionary').textContent);
 const number = new Intl.NumberFormat('zh-CN', {minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false});
@@ -117,16 +118,45 @@ function refit(root, data, selected, limit) {
   group(root, '控制点隔离', quarantined(data.quarantine.filter(row => !selected || row.sheet === selected)));
 }
 
-function seams(root, data, activeEdge) {
-  root.append(table([['拼缝'], ['相邻图幅'], ['状态'], ['见证点', 'num'], ['覆盖率 A / B'], ['最大 m', 'num'], ['中位 m', 'num'], ['原因']],
-    data.edges.map(edge => [edge.code, `${edge.a} ${edge.a_side} · ${edge.b} ${edge.b_side}`, badge(edge.status), edge.count,
+function concurrenceCard(root, document) {
+  const frame = el('div', null, 'concurrence-card');
+  const head = el('p', null, 'concurrence-head');
+  head.append(badge('CONCURRED'), el('strong', `接缝会签 · ${document.edge}`),
+    el('span', `${document.reviewer} · ${document.signed_at}`), el('span', `版本 v${document.version}`, 'num'));
+  frame.append(head);
+  const summary = document.summary;
+  frame.append(el('p', `采信限内见证 ${summary.adopted_count} 站；待复核超限争议 ${summary.disputed_count} 站；共 ${summary.station_count} 站。限值 ${fmt(document.limit_m)} m，最大偏差 ${fmt(document.max_m)} m。`, 'concurrence-line'));
+  frame.append(table([['处置'], ['共同暂扣图幅'], ['放行条件']], [[
+    badge(document.disposition.code),
+    document.disposition.sheets.map(sheet => `${sheet.code} ${sheet.title}`).join(' / '),
+    document.disposition.release_condition,
+  ]]));
+  frame.append(el('h3', `${document.edge} 会签采信见证`));
+  frame.append(table([['证点'], ['会签判定'], ['平面偏差 m', 'num'], ['法向 m', 'num'], ['切向 m', 'num'], ['源行']],
+    document.adopted_stations.map(row => [row.name, badge(row.verdict), fmt(row.gap_m), fmt(row.normal_m),
+      fmt(row.tangent_m), evidence(row.source)])));
+  frame.append(el('h3', `${document.edge} 待复核争议点`));
+  frame.append(table([['证点'], ['会签判定'], ['平面偏差 m', 'num'], ['法向 m', 'num'], ['切向 m', 'num'], ['源行'], ['原始字段', 'raw']],
+    document.disputed_stations.map(row => [row.name, badge(row.verdict), fmt(row.gap_m), fmt(row.normal_m),
+      fmt(row.tangent_m), evidence(row.source), row.source.raw.join(' | ')])));
+  group(root, '接缝会签结论', frame);
+}
+
+function seams(root, data, activeEdge, snapshot) {
+  const concurred = new Map((snapshot?.concurrences || []).map(item => [item.edge, item]));
+  root.append(table([['拼缝'], ['相邻图幅'], ['状态'], ['会签'], ['见证点', 'num'], ['覆盖率 A / B'], ['最大 m', 'num'], ['中位 m', 'num'], ['原因']],
+    data.edges.map(edge => [edge.code, `${edge.a} ${edge.a_side} · ${edge.b} ${edge.b_side}`, badge(edge.status),
+      concurred.has(edge.code) ? badge('CONCURRED') : '—', edge.count,
       edge.coverage.map(n => `${(n * 100).toFixed(1)}%`).join(' / '), fmt(edge.max_m), fmt(edge.median_m),
       edge.reasons.length ? edge.reasons.map(reason).join(' / ') : '—'])));
   const active = data.edges.find(edge => edge.code === activeEdge) || data.edges[0];
   if (active) {
     group(root, `${active.code} 见证点`, table([['证点'], ['甲侧像素'], ['乙侧像素'], ['法向 m', 'num'], ['切向 m', 'num'],
-      ['平面偏差 m', 'num'], ['源行']], active.stations.map(row => [row.name, row.a_pixel.join(' / '), row.b_pixel.join(' / '),
-      fmt(row.normal_m), fmt(row.tangent_m), fmt(row.gap_m), evidence(row.source)])));
+      ['平面偏差 m', 'num'], ['逐点判定'], ['源行']], active.stations.map(row => [row.name,
+      row.a_pixel.join(' / '), row.b_pixel.join(' / '), fmt(row.normal_m), fmt(row.tangent_m), fmt(row.gap_m),
+      row.verdict ? badge(row.verdict) : '—', evidence(row.source)])));
+    const document = concurred.get(active.code);
+    if (document) concurrenceCard(root, document);
   }
   group(root, '见证行隔离', quarantined(data.quarantine));
 }
@@ -140,12 +170,14 @@ function review(root, snapshot) {
     `${width[1].paired} 已配对 + ${width[1].isolated} 隔离`,
     `${width[2].eligible} 可用 + ${width[2].isolated} 隔离`,
   ];
-  root.append(table([['图幅'], ['校验结论'], ['拟合均方根 m', 'num'], ['关联拼缝'], ['理由'], ['签审员'], ['签审时间']],
+  root.append(table([['图幅'], ['校验结论'], ['拟合均方根 m', 'num'], ['关联拼缝'], ['会签暂扣'], ['理由'], ['签审员'], ['签审时间']],
     snapshot.reviews.map(row => {
       const signature = signed.get(row.code);
       return [`${row.code} ${row.title}`, badge(signature ? 'SIGNED' : row.status), fmt(row.fit_rms_m),
-        row.edges.join(' / '), reason(row.reason), signature?.reviewer, signature?.signed_at];
+        row.edges.join(' / '), row.concurrence_edges?.length ? row.concurrence_edges.join(' / ') : '—',
+        reason(row.reason), signature?.reviewer, signature?.signed_at];
     })));
+  for (const document of snapshot.concurrences || []) concurrenceCard(root, document);
   group(root, '原件对账', table([['档件'], ['原件记录', 'num'], ['归属'], ['核对']],
     width.map((entry, index) => [['控制点', '地面点', '拼缝见证'][index], entry.input, sums[index], badge('PASS')])));
 }
@@ -161,6 +193,6 @@ export function renderLedger(root, section, {snapshot, preview, selected, edgeId
   if (section === 'intake') intake(root, preview ? value.tables : value);
   else if (section === 'affine') affine(root, preview ? value.sheets : value, snapshot?.pairing.pairs || []);
   else if (section === 'refit') refit(root, value, selected, limit);
-  else if (section === 'seams') seams(root, value, edgeId);
+  else if (section === 'seams') seams(root, value, edgeId, snapshot);
   else renderers[section](root, value);
 }

@@ -7,4 +7,10 @@
     <button class="button primary" type="submit">签审入册</button>
     <p class="feedback" id="signature-error" role="alert" hidden></p>
   </form>
+  <form class="signature-form concurrence-form" id="concurrence-form" hidden>
+    <label>会签拼缝 <select id="concurrence-edge" name="edge"></select></label>
+    <label>会签员 <input id="concurrence-reviewer" name="reviewer" required maxlength="30" autocomplete="name"></label>
+    <button class="button primary" type="submit">接缝会签</button>
+    <p class="feedback" id="concurrence-error" role="alert" hidden></p>
+  </form>
 </section>

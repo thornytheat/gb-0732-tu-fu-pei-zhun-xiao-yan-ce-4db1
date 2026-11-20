@@ -6,7 +6,8 @@ from app.main import create_app
 def test_home_and_each_independent_endpoint(client):
     home = client.get('/')
     assert home.status_code == 200
-    assert all(mark in home.text for mark in ('运行校验', '导出证据', 'atlas-plot', 'edge-plot', '图幅签审'))
+    assert all(mark in home.text for mark in ('运行校验', '导出证据', 'atlas-plot', 'edge-plot', '图幅签审',
+                                              'concurrence-form', '接缝会签'))
     for stage, field in [('intake', 'catalog'), ('coordinates', 'ground'), ('pairing', 'pairs'),
                          ('affine', 'sheets'), ('refit', 'outliers'), ('seams', 'edges')]:
         result = client.get(f'/api/{stage}?dataset=field')
